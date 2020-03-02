@@ -1,0 +1,10 @@
+env GOOS=darwin GOARCH=386 go build -o binaries/codechar-darwin-386/codecharacter-cli
+env GOOS=darwin GOARCH=amd64 go build -o binaries/codechar-darwin-amd64/codecharacter-cli
+env GOOS=darwin GOARCH=arm go build -o binaries/codechar-darwin-arm/codecharacter-cli
+env GOOS=darwin GOARCH=arm64 go build -o binaries/codechar-darwin-arm64/codecharacter-cli
+env GOOS=windows GOARCH=amd64 go build -o binaries/codechar-windows-amd64/codecharacter-cli
+env GOOS=windows GOARCH=386 go build -o binaries/codechar-windows-386/codecharacter-cli
+env GOOS=linux GOARCH=amd64 go build -o binaries/codechar-linux-amd64/codecharacter-cli
+env GOOS=linux GOARCH=arm go build -o binaries/codechar-linux-arm/codecharacter-cli
+env GOOS=linux GOARCH=arm64 go build -o binaries/codechar-linux-arm64/codecharacter-cli
+env GOOS=linux GOARCH=386 go build -o binaries/codechar-linux-386/codecharacter-cli
