@@ -98,15 +98,21 @@ func checkAndPullCompilerImage(ctx context.Context, cli *client.Client) {
 			compilerImageExists = true
 		}
 	}
+	if !internetConnected() {
+		if !compilerImageExists {
+			log.Fatal("Internet connecetion is required for the first pull. Subsequent runs can be performed offline. Exiting...")
+		}
+	} else {
+		if !compilerImageExists {
+			log.Printf("Pulling runner image... (Might take a few minutes for first pull)\n")
+		}
+		reader, err := cli.ImagePull(ctx, COMPILER_IMAGE, types.ImagePullOptions{})
+		io.Copy(os.Stdout, reader)
+		if err != nil {
+			panic(err)
+		}
+	}
 
-	if !compilerImageExists {
-		log.Printf("Pulling compiler image... (Might take a few minutes for first pull)\n")
-	}
-	reader, err := cli.ImagePull(ctx, COMPILER_IMAGE, types.ImagePullOptions{})
-	io.Copy(os.Stdout, reader)
-	if err != nil {
-		panic(err)
-	}
 }
 
 func compile(ctx context.Context, inputDir string, outputDir string, cli *client.Client, wg *sync.WaitGroup) {
@@ -171,15 +177,20 @@ func execute(ctx context.Context, inputDir string, outputDir string, cli *client
 		}
 	}
 
-	if !runnerImageExists {
-		log.Printf("Pulling runner image... (Might take a few minutes for first pull)\n")
+	if !internetConnected() {
+		if !runnerImageExists {
+			log.Fatal("Internet connecetion is required for the first pull. Subsequent runs can be performed offline. Exiting...")
+		}
+	} else {
+		if !runnerImageExists {
+			log.Printf("Pulling runner image... (Might take a few minutes for first pull)\n")
+		}
+		reader, err := cli.ImagePull(ctx, RUNNER_IMAGE, types.ImagePullOptions{})
+		if err != nil {
+			panic(err)
+		}
+		io.Copy(os.Stdout, reader)
 	}
-	reader, err := cli.ImagePull(ctx, RUNNER_IMAGE, types.ImagePullOptions{})
-
-	if err != nil {
-		panic(err)
-	}
-	io.Copy(os.Stdout, reader)
 
 	log.Printf("Executing...\n")
 	//Create runner container

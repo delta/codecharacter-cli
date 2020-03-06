@@ -5,6 +5,7 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
+	"net/http"
 	"os"
 	"path"
 	"strings"
@@ -152,4 +153,12 @@ func setupCompileDirectories(currentPath string, playerSrcPath string, playerNum
 		panic(err)
 	}
 	return srcDirectory, playerDirectory
+}
+
+func internetConnected() (ok bool) {
+	_, err := http.Get("http://google.com/")
+	if err != nil {
+		return false
+	}
+	return true
 }
