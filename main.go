@@ -7,7 +7,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"path"
 	"sync"
 	"time"
 
@@ -16,7 +15,6 @@ import (
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/mount"
 	"github.com/docker/docker/client"
-	"github.com/docker/docker/pkg/stdcopy"
 	"golang.org/x/net/context"
 )
 
@@ -24,14 +22,18 @@ func main() {
 
 	start := time.Now()
 	//Get map file path from the -m option
-	mapFile := flag.String("m", "", "Map")
+	mapArg := flag.String("m", "", "Map")
 	port := flag.String("p", "3000", "Port")
 	// var port int
 	// flag.IntVar(&port, "p", 3000, "Port")
 	flag.Parse()
 	var err error
-	if *mapFile != "" {
-		gameMap, err = ioutil.ReadFile(*mapFile)
+	// gameMap, err := Asset("map.txt")
+	if err != nil {
+		panic(err)
+	}
+	if *mapArg != "" {
+		gameMap, err = ioutil.ReadFile(*mapArg)
 		if err != nil {
 			panic(err)
 		}
@@ -57,18 +59,18 @@ func main() {
 
 	//Compile player2 code
 	wg.Add(1)
-	go compile(ctx, player1SrcDirectory, player1DllsDirectory, cli, &wg)
+	compile(ctx, player1SrcDirectory, player1DllsDirectory, cli, &wg)
 
 	//Setup compile directories for player2
 	player2SrcDirectory, player2DllsDirectory := setupCompileDirectories(currentPath, player2SrcPath, "2")
 
 	//Compile player2 code
 	wg.Add(1)
-	go compile(ctx, player2SrcDirectory, player2DllsDirectory, cli, &wg)
+	compile(ctx, player2SrcDirectory, player2DllsDirectory, cli, &wg)
 
 	//Waiting for compilation to finish
-	wg.Wait()
-	dllsDirectory, outputDirectory := setupExecutionDirectories(currentPath, player1DllsDirectory, player2DllsDirectory)
+	// wg.Wait()
+	dllsDirectory, outputDirectory := setupExecutionDirectories(currentPath, player1DllsDirectory, player2DllsDirectory, gameMap)
 
 	//Execute game
 	execute(ctx, dllsDirectory, outputDirectory, cli)
@@ -83,60 +85,7 @@ func main() {
 	serve(outputDirectory, *port)
 }
 
-func createContextAndClient() (context.Context, *client.Client) {
-	ctx := context.Background()
-	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
-	if err != nil {
-		panic(err)
-	}
-	return ctx, cli
-}
-
-func copy(src, dst string) error {
-	in, err := os.Open(src)
-	if err != nil {
-		return err
-	}
-	defer in.Close()
-
-	out, err := os.Create(dst)
-	if err != nil {
-		return err
-	}
-	defer out.Close()
-
-	_, err = io.Copy(out, in)
-	if err != nil {
-		return err
-	}
-	return out.Close()
-}
-
-func setupCompileDirectories(currentPath string, playerSrcPath string, playerNumber string) (string, string) {
-	//Create directory to store player code for compilation
-	srcDirectory := path.Join(currentPath, "player"+playerNumber+"source")
-
-	err := os.MkdirAll(srcDirectory, os.ModePerm)
-	if err != nil {
-		panic(err)
-	}
-	//Copy player1 code to source directory
-	err = copy(playerSrcPath, path.Join(srcDirectory, "player_code.cpp"))
-	if err != nil {
-		panic(err)
-	}
-
-	//Create directory to store player1 dlls
-	playerDirectory := path.Join(currentPath, "player1Dlls")
-	err = os.MkdirAll(playerDirectory, os.ModePerm)
-	if err != nil {
-		panic(err)
-	}
-	return srcDirectory, playerDirectory
-}
-
 func checkAndPullCompilerImage(ctx context.Context, cli *client.Client) {
-	start := time.Now()
 	//List all images
 	images, err := cli.ImageList(context.Background(), types.ImageListOptions{})
 	if err != nil {
@@ -151,15 +100,10 @@ func checkAndPullCompilerImage(ctx context.Context, cli *client.Client) {
 	}
 
 	if !compilerImageExists {
-		log.Printf("Pulling compiler image...\n")
-		reader, err := cli.ImagePull(ctx, COMPILER_IMAGE, types.ImagePullOptions{})
-		io.Copy(os.Stdout, reader)
-		if err != nil {
-			panic(err)
-		}
-		elapsed := time.Since(start)
-		log.Printf("Compiler image pull took %s\n", elapsed)
+		log.Printf("Pulling compiler image... (Might take a few minutes for first pull)\n")
 	}
+	reader, err := cli.ImagePull(ctx, COMPILER_IMAGE, types.ImagePullOptions{})
+	io.Copy(os.Stdout, reader)
 	if err != nil {
 		panic(err)
 	}
@@ -167,6 +111,7 @@ func checkAndPullCompilerImage(ctx context.Context, cli *client.Client) {
 
 func compile(ctx context.Context, inputDir string, outputDir string, cli *client.Client, wg *sync.WaitGroup) {
 
+	log.Printf(inputDir)
 	defer wg.Done()
 
 	log.Printf("Compiling...\n")
@@ -203,33 +148,12 @@ func compile(ctx context.Context, inputDir string, outputDir string, cli *client
 	case <-statusCh:
 	}
 
-	out, err := cli.ContainerLogs(ctx, resp.ID, types.ContainerLogsOptions{ShowStdout: true})
-	stdcopy.StdCopy(os.Stdout, os.Stderr, out)
-	if err != nil {
-		panic(err)
-	}
-
-}
-
-func setupExecutionDirectories(currentPath string, player1Dlls string, player2Dlls string) (string, string) {
-	//Create directory to store dlls for execution
-	dllsDirectory := path.Join(currentPath, "dlls")
-	err := os.MkdirAll(dllsDirectory, os.ModePerm)
-
-	//copy only the required files to dll directory
-	err = copy(path.Join(player1Dlls, "libplayer_1_code.so"), path.Join(dllsDirectory, "libplayer_1_code.so"))
-	err = copy(path.Join(player2Dlls, "libplayer_2_code.so"), path.Join(dllsDirectory, "libplayer_2_code.so"))
-	writeKeyAndMap(dllsDirectory)
+	out, err := cli.ContainerLogs(ctx, resp.ID, types.ContainerLogsOptions{ShowStdout: true, ShowStderr: true})
 
 	if err != nil {
 		panic(err)
 	}
-
-	//Create directory to store dlls for execution
-	outputDirectory := path.Join(currentPath, "output_log")
-	err = os.MkdirAll(outputDirectory, os.ModePerm)
-
-	return dllsDirectory, outputDirectory
+	handleContainerLogs(out, "COMPILE")
 }
 
 func execute(ctx context.Context, inputDir string, outputDir string, cli *client.Client) {
@@ -248,19 +172,14 @@ func execute(ctx context.Context, inputDir string, outputDir string, cli *client
 	}
 
 	if !runnerImageExists {
-		log.Printf("Pulling runner image...\n")
-		reader, err := cli.ImagePull(ctx, RUNNER_IMAGE, types.ImagePullOptions{})
-		io.Copy(os.Stdout, reader)
-		elapsed := time.Since(start)
-		log.Printf("Runner image pull took %s\n", elapsed)
-		if err != nil {
-			panic(err)
-		}
+		log.Printf("Pulling runner image... (Might take a few minutes for first pull)\n")
 	}
+	reader, err := cli.ImagePull(ctx, RUNNER_IMAGE, types.ImagePullOptions{})
 
 	if err != nil {
 		panic(err)
 	}
+	io.Copy(os.Stdout, reader)
 
 	log.Printf("Executing...\n")
 	//Create runner container
@@ -298,58 +217,14 @@ func execute(ctx context.Context, inputDir string, outputDir string, cli *client
 		}
 	case <-statusCh:
 	}
-	out, err := cli.ContainerLogs(ctx, resp.ID, types.ContainerLogsOptions{ShowStdout: true})
+	out, err := cli.ContainerLogs(ctx, resp.ID, types.ContainerLogsOptions{ShowStdout: true, ShowStderr: true})
 	if err != nil {
 		panic(err)
 	}
-
-	stdcopy.StdCopy(os.Stdout, os.Stderr, out)
+	handleContainerLogs(out, "EXECUTE")
 
 	elapsed := time.Since(start)
 	log.Printf("Execution took %s\n", elapsed)
-}
-
-func writeKeyAndMap(dllsDirectory string) {
-	err := ioutil.WriteFile(path.Join(dllsDirectory, "key.txt"), key, 0666)
-	if err != nil {
-		panic(err)
-	}
-	err = ioutil.WriteFile(path.Join(dllsDirectory, "map.txt"), gameMap, 0666)
-	if err != nil {
-		panic(err)
-	}
-}
-
-func setUpServeDirectory(outputDirectory string) {
-	//Create folder to store player proto files
-	protoDirectory := path.Join(outputDirectory, "proto")
-
-	err := os.MkdirAll(protoDirectory, os.ModePerm)
-	if err != nil {
-		panic(err)
-	}
-
-	//Copy proto files to proto directory
-	err = copy(path.Join(outputDirectory, "player_1.dlog"), path.Join(protoDirectory, "player_1.dlog"))
-	err = copy(path.Join(outputDirectory, "player_2.dlog"), path.Join(protoDirectory, "player_2.dlog"))
-
-	staticAsset, err := Asset("index.html")
-	if err != nil {
-		panic(err)
-	}
-	err = ioutil.WriteFile(path.Join(outputDirectory, "index.html"), staticAsset, 0666)
-	if err != nil {
-		panic(err)
-	}
-
-	staticAsset, err = Asset("libpack.js")
-	if err != nil {
-		panic(err)
-	}
-	err = ioutil.WriteFile(path.Join(outputDirectory, "libpack.js"), staticAsset, 0666)
-	if err != nil {
-		panic(err)
-	}
 }
 
 func serve(outputDirectory string, port string) {

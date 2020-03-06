@@ -4,10 +4,10 @@ CLI for Code Character to compile, execute and render the game offline
 
 -------------------------------------------
 
-##Requirements
+## Requirements
 - Docker
 
-##Usage instructions
+## Usage instructions
 
 ```bash
 ./codecharacter-cli [ -p PORT ] [ -m MAP_FILE ] PLAYER_1_CODE PLAYER_2_CODE
