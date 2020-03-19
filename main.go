@@ -84,12 +84,14 @@ func main() {
 	elapsed := time.Since(start)
 	log.Printf("Total time : %s\n", elapsed)
 	//Serve output directory
+	go openBrowser("http://localhost:" + *port)
 	serve(outputDirectory, *port)
 }
 
 func renderGame(logDirPath, port string) {
 	if fileExists(path.Join(logDirPath, "game.log")) && fileExists(path.Join(logDirPath, "player_1.dlog")) && fileExists(path.Join(logDirPath, "player_2.dlog")) {
 		setUpServeDirectory(logDirPath)
+		go openBrowser("http://localhost:" + port)
 		serve(logDirPath, port)
 	} else {
 		log.Fatalf("Given directory(%s) must contain the following files :\ngame.log\nplayer_1.dlog\nplayer_2.dlog", logDirPath)
