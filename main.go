@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path"
 	"sync"
 	"time"
 
@@ -24,13 +25,16 @@ func main() {
 	//Get map file path from the -m option
 	mapArg := flag.String("m", "", "Map")
 	port := flag.String("p", "3000", "Port")
-	// var port int
-	// flag.IntVar(&port, "p", 3000, "Port")
+	//-r flag for just rendering
+	renderFlag := flag.Bool("r", false, "Render")
 	flag.Parse()
 	var err error
-	// gameMap, err := Asset("map.txt")
 	if err != nil {
 		panic(err)
+	}
+
+	if *renderFlag {
+		renderGame(flag.Arg(0), *port)
 	}
 	if *mapArg != "" {
 		gameMap, err = ioutil.ReadFile(*mapArg)
@@ -78,11 +82,18 @@ func main() {
 	setUpServeDirectory(outputDirectory)
 
 	elapsed := time.Since(start)
-
 	log.Printf("Total time : %s\n", elapsed)
-
 	//Serve output directory
 	serve(outputDirectory, *port)
+}
+
+func renderGame(logDirPath, port string) {
+	if fileExists(path.Join(logDirPath, "game.log")) && fileExists(path.Join(logDirPath, "player_1.dlog")) && fileExists(path.Join(logDirPath, "player_2.dlog")) {
+		setUpServeDirectory(logDirPath)
+		serve(logDirPath, port)
+	} else {
+		log.Fatalf("Given directory(%s) must contain the following files :\ngame.log\nplayer_1.dlog\nplayer_2.dlog", logDirPath)
+	}
 }
 
 func checkAndPullCompilerImage(ctx context.Context, cli *client.Client) {
